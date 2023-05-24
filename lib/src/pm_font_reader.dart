@@ -294,7 +294,7 @@ class PMFontReader {
   void _readFormat4Table(data, offset, glyphIdToCharacterCodes) {
     offset = offset + font.tables['cmap'].offset;
 
-    var format = fontData.getUint16(offset);
+    int format = fontData.getUint16(offset);
     offset += 2;
 
     if (format != 4) {
@@ -307,62 +307,70 @@ class PMFontReader {
       }
     }
 
-    // var subtableLength = fontData.getUint16(offset);
+    int length = fontData.getUint16(offset);
+    offset += 2;
+    int language = fontData.getUint16(offset);
+    offset += 2;
+    int nSegments = (fontData.getUint16(offset) / 2).round();
+    offset += 2;
+    int searchRange = fontData.getUint16(offset);
+    offset += 2;
+    int entrySelector = fontData.getUint16(offset);
+    offset += 2;
+    int rangeShift = fontData.getUint16(offset);
     offset += 2;
 
-    offset += 2; // skip language
-    var nSegments = fontData.getUint16(offset) / 2;
-    offset += 2;
-
-    var endCodes = [];
-    for (var i = 0; i < nSegments; i++) {
+    var endCodes = <int>[];
+    for (int i = 0; i < nSegments; i++) {
       endCodes.add(fontData.getUint16(offset));
       offset += 2;
     }
+    int reservedPad = fontData.getUint16(offset);
+    offset += 2;
+    if (reservedPad != 0 && endCodes.last != 65535) {
+      throw FormatException("Error in TTF");
+    }
 
-    offset += 2; // step over reserved pad
-
-    var startCodes = [];
-    for (var i = 0; i < nSegments; i++) {
+    var startCodes = <int>[];
+    for (int i = 0; i < nSegments; i++) {
       startCodes.add(fontData.getUint16(offset));
       offset += 2;
     }
 
-    var idDeltas = [];
-    for (var i = 0; i < nSegments; i++) {
+    var idDeltas = <int>[];
+    for (int i = 0; i < nSegments; i++) {
       idDeltas.add(fontData.getInt16(offset));
       offset += 2;
     }
 
-    var idRangeOffsets = [];
-    for (var i = 0; i < nSegments; i++) {
+    var idRangeOffsets = <int>[];
+    var idRangeOffsetAdresses = <int>[];
+    for (int i = 0; i < nSegments; i++) {
       idRangeOffsets.add(fontData.getUint16(offset));
+      idRangeOffsetAdresses.add(offset);
       offset += 2;
     }
 
-    var originalOffset = offset;
-
     for (var i = 0; i < nSegments; i++) {
-      var start = startCodes[i];
-      var end = endCodes[i];
-      var idDelta = idDeltas[i];
-      var idRangeOffset = idRangeOffsets[i];
-      var glyphIndex = -1;
-      for (var j = start; j <= end; j++) {
+      int start = startCodes[i];
+      int end = endCodes[i];
+      int idDelta = idDeltas[i];
+      int idRangeOffset = idRangeOffsets[i];
+      int idRangeOffsetAdress = idRangeOffsetAdresses[i];
+      int glyphIndex;
+      for (int j = start; j <= end; j++) {
         if (idRangeOffset == 0) {
           glyphIndex = (j + idDelta) % 65536;
           glyphIdToCharacterCodes[glyphIndex] = j;
         } else {
-          var nOffset = originalOffset +
-              ((idRangeOffset / 2) + (j - start) + (i - nSegments)) * 2;
-          var glyphIndex = fontData.getUint16(nOffset.toInt());
-
-          if (glyphIndex != 0) {
-            glyphIndex += idDelta;
-            glyphIndex = glyphIndex % 65536;
-            if (glyphIdToCharacterCodes[glyphIndex] == 0)
-              glyphIdToCharacterCodes[glyphIndex] = j;
+          if (idRangeOffset == 0) {
+            glyphIndex = (idDelta + j) % 65536;
+          } else {
+            int glyphIndexAddress =
+                idRangeOffset + 2 * (j - start) + idRangeOffsetAdress;
+            glyphIndex = fontData.getUint16(glyphIndexAddress);
           }
+          glyphIdToCharacterCodes[glyphIndex] = j;
         }
       }
     }
