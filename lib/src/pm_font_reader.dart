@@ -11,6 +11,17 @@ import './pm_font_table.dart';
 * Copyright Ashraff Hathibelagal 2019
 */
 
+/// This class is used for individual kerning pairs found in format0 kerning tables
+class KerningPair {
+  KerningPair(
+      {required this.leftCharacter,
+      required this.rightCharacter,
+      required this.value});
+  int leftCharacter;
+  int rightCharacter;
+  int value;
+}
+
 /// This class contains all the code required to read the contents of
 /// a .ttf file.
 class PMFontReader {
@@ -39,6 +50,7 @@ class PMFontReader {
     var offset = _initializeOffsetTable();
     _initializeTables(offset);
     _readHead();
+    _readKernTable();
     _setNumGlyphs();
     _createGlyphs();
     _getCharacterMappings();
@@ -90,6 +102,101 @@ class PMFontReader {
     charCodes.add(fontData.getUint8(offset + 3));
 
     return String.fromCharCodes(charCodes);
+  }
+
+  /// The kerning table is optional in a .ttf therefore it first checks
+  /// whether it is present.
+  void _readKernTable() {
+    PMFontTable? kernTable = font.tables['kern'];
+    if (kernTable != null) {
+      int startOffset = kernTable.offset;
+      int version = fontData.getUint16(startOffset);
+      int nTables = fontData.getUint16(startOffset + 2);
+      kernTable.data = {
+        'version': version,
+        "nTables": nTables,
+        "subtables": _getSubtables(nTables, startOffset + 4)
+      };
+    }
+  }
+
+  /// A kerning table can hold multiple subtables
+  List _getSubtables(int nTables, int offset) {
+    List subtables = [];
+    for (int i = 0; i < nTables; i++) {
+      int currentOffset = offset + (i * 6);
+
+      int version = fontData.getUint16(currentOffset);
+      currentOffset = currentOffset + 2;
+      int length = fontData.getUint16(currentOffset);
+      currentOffset = currentOffset + 2;
+      Map<String, int> coverage =
+          _getCoverage(fontData.getUint16(currentOffset));
+      currentOffset = currentOffset + 2;
+      late Map data;
+      if (coverage["format"] == 0) {
+        data = _readKernFormat0(currentOffset);
+      } else {
+        throw Exception("Cannot read format 2 kerning table");
+      }
+      subtables.add({
+        "version": version,
+        "length": length,
+        "coverage": coverage,
+        "data": data
+      });
+    }
+    return subtables;
+  }
+
+  /// First it takes the first byte of the uint16,
+  /// afterwards it shifts it places and assigns format
+  /// to the second byte.
+  Map<String, int> _getCoverage(int uint16) {
+    int firstByte = uint16 % 0xff;
+    return {
+      "horizontal": _getBit(firstByte, 0),
+      "minimum": _getBit(firstByte, 1),
+      "crossStream": _getBit(firstByte, 2),
+      "override": _getBit(firstByte, 3), // TODO: Handle case where this is 1
+      "reserved1": (firstByte & 0xf0), // nibble 4-7
+      "format": firstByte >> 8
+    };
+  }
+
+  /// Gets individual bit
+  int _getBit(int uint16, int bitNr) => ((uint16 & (0x0001 << bitNr)) >> bitNr);
+
+  /// Reads the format0 subtable
+  Map<String, dynamic> _readKernFormat0(int offset) {
+    int nPairs = fontData.getUint16(offset);
+    offset = offset + 2;
+    int searchRange = fontData.getUint16(offset);
+    offset = offset + 2;
+    int entrySelector = fontData.getUint16(offset);
+    offset = offset + 2;
+    int rangeShift = fontData.getUint16(offset);
+    offset = offset + 2;
+    List<KerningPair> kerningPairs = [];
+    for (var i = 0; i < nPairs; i++) {
+      int firstCharacter = fontData.getUint16(offset);
+      offset = offset + 2;
+      int secondCharacter = fontData.getUint16(offset);
+      offset = offset + 2;
+      int value = fontData.getInt16(offset);
+      offset = offset + 2;
+      kerningPairs.add(KerningPair(
+          leftCharacter: firstCharacter,
+          rightCharacter: secondCharacter,
+          value: value));
+    }
+    return {
+      "nPairs": nPairs,
+      "searchRange": searchRange,
+      "entrySelector": entrySelector,
+      "rangeShift": rangeShift,
+      "kerningPairs": kerningPairs
+    };
   }
 
   /// Reads the glyf and loca tables to determine a bunch of coordinates that
