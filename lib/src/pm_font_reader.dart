@@ -13,13 +13,22 @@ import './pm_font_table.dart';
 
 /// This class is used for individual kerning pairs found in format0 kerning tables
 class KerningPair {
-  KerningPair(
-      {required this.leftCharacter,
-      required this.rightCharacter,
-      required this.value});
-  int leftCharacter;
-  int rightCharacter;
-  int value;
+  KerningPair({
+    required this.leftCharacter,
+    required this.rightCharacter,
+  });
+  final int leftCharacter;
+  final int rightCharacter;
+
+  @override
+  int get hashCode => Object.hash(leftCharacter, rightCharacter);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KerningPair &&
+          leftCharacter == other.leftCharacter &&
+          rightCharacter == other.rightCharacter;
 }
 
 /// This class contains all the code required to read the contents of
@@ -177,7 +186,7 @@ class PMFontReader {
     offset = offset + 2;
     int rangeShift = fontData.getUint16(offset);
     offset = offset + 2;
-    List<KerningPair> kerningPairs = [];
+    Map<KerningPair, int> kerningPairs = {};
     for (var i = 0; i < nPairs; i++) {
       int firstCharacter = fontData.getUint16(offset);
       offset = offset + 2;
@@ -185,10 +194,10 @@ class PMFontReader {
       offset = offset + 2;
       int value = fontData.getInt16(offset);
       offset = offset + 2;
-      kerningPairs.add(KerningPair(
-          leftCharacter: firstCharacter,
-          rightCharacter: secondCharacter,
-          value: value));
+      kerningPairs[KerningPair(
+        leftCharacter: firstCharacter,
+        rightCharacter: secondCharacter,
+      )] = value;
     }
     return {
       "nPairs": nPairs,
