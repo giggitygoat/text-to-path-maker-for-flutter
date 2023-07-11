@@ -186,7 +186,7 @@ class PMFontReader {
     offset = offset + 2;
     int rangeShift = fontData.getUint16(offset);
     offset = offset + 2;
-    Map<KerningPair, int> kerningPairs = {};
+    HashMap<KerningPair, int> kerningPairs = {};
     for (var i = 0; i < nPairs; i++) {
       int firstCharacter = fontData.getUint16(offset);
       offset = offset + 2;
